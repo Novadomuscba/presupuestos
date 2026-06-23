@@ -1,0 +1,536 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Presupuesto Nova Domus</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    background: #0d1b3e;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 20px 16px 32px;
+  }
+
+  /* ── TOP UI (no se exporta) ── */
+  #top-ui {
+    width: 100%;
+    max-width: 390px;
+    margin-bottom: 16px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  #top-title { color: rgba(255,255,255,0.6); font-size: 12px; letter-spacing: 0.06em; text-transform: uppercase; }
+  #btn-guardar {
+    background: #fff;
+    color: #0d1b3e;
+    border: none;
+    border-radius: 20px;
+    padding: 8px 18px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    letter-spacing: 0.02em;
+  }
+  #btn-guardar:active { opacity: 0.85; transform: scale(0.97); }
+  #btn-guardar svg { width: 15px; height: 15px; }
+
+  #loading-msg {
+    color: rgba(255,255,255,0.5);
+    font-size: 13px;
+    text-align: center;
+    margin-top: 60px;
+    display: none;
+  }
+  #error-msg {
+    color: #ff6b6b;
+    font-size: 13px;
+    text-align: center;
+    margin-top: 60px;
+    background: rgba(255,100,100,0.1);
+    padding: 16px;
+    border-radius: 12px;
+    max-width: 320px;
+    display: none;
+  }
+
+  /* ── CARD EXPORTABLE ── */
+  #presupuesto-card {
+    width: 390px;
+    min-height: 693px; /* aprox 9:16 base */
+    background: #fff;
+    border-radius: 20px;
+    overflow: hidden;
+    display: none;
+    flex-direction: column;
+  }
+
+  /* Header */
+  .card-header {
+    background: #0d1b3e;
+    padding: 24px 24px 20px;
+    position: relative;
+    overflow: hidden;
+  }
+  .card-header::after {
+    content: '';
+    position: absolute;
+    right: -30px; top: -30px;
+    width: 160px; height: 160px;
+    border-radius: 50%;
+    background: rgba(255,255,255,0.04);
+  }
+  .card-header::before {
+    content: '';
+    position: absolute;
+    right: 20px; top: 40px;
+    width: 80px; height: 80px;
+    border-radius: 50%;
+    background: rgba(255,255,255,0.03);
+  }
+  .header-top { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 16px; }
+  .logo-area { display: flex; align-items: center; gap: 10px; }
+  .logo-icon { width: 36px; height: 36px; flex-shrink: 0; }
+  .logo-text { display: flex; flex-direction: column; }
+  .logo-nova { font-size: 15px; font-weight: 700; color: #fff; letter-spacing: 0.06em; line-height: 1; }
+  .logo-domus { font-size: 15px; font-weight: 300; color: rgba(255,255,255,0.7); letter-spacing: 0.06em; line-height: 1; margin-top: 2px; }
+  .header-num { text-align: right; }
+  .num-label { font-size: 9px; color: rgba(255,255,255,0.4); letter-spacing: 0.08em; text-transform: uppercase; }
+  .num-val { font-size: 13px; font-weight: 600; color: rgba(255,255,255,0.85); margin-top: 2px; }
+  .header-tagline { font-size: 10px; color: rgba(255,255,255,0.35); letter-spacing: 0.12em; text-transform: uppercase; border-top: 0.5px solid rgba(255,255,255,0.1); padding-top: 12px; }
+
+  /* Cliente strip */
+  .cliente-strip {
+    background: #f0f4ff;
+    padding: 14px 24px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    border-bottom: 1px solid #e4eaf8;
+  }
+  .cliente-info {}
+  .cliente-label { font-size: 9px; color: #8898b8; text-transform: uppercase; letter-spacing: 0.08em; }
+  .cliente-nombre { font-size: 15px; font-weight: 600; color: #0d1b3e; margin-top: 2px; }
+  .cliente-empresa { font-size: 12px; color: #5a6a8a; margin-top: 1px; }
+  .tipo-badge {
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    padding: 5px 12px;
+    border-radius: 20px;
+    flex-shrink: 0;
+  }
+  .tipo-b2c { background: #e8f5e8; color: #1a7a1a; }
+  .tipo-b2b { background: #0d1b3e; color: #fff; }
+
+  /* Secciones de items */
+  .section-label {
+    padding: 8px 24px;
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: #8898b8;
+    background: #f8f9fc;
+    border-bottom: 0.5px solid #edf0f8;
+    border-top: 0.5px solid #edf0f8;
+  }
+
+  .item-row {
+    padding: 11px 24px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    border-bottom: 0.5px solid #f0f2f8;
+    gap: 12px;
+  }
+  .item-row:last-of-type { border-bottom: none; }
+  .item-desc { flex: 1; min-width: 0; }
+  .item-marca { font-size: 9px; color: #8898b8; text-transform: uppercase; letter-spacing: 0.06em; }
+  .item-nombre { font-size: 13px; color: #1a2744; font-weight: 500; margin-top: 1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .item-qty-row { display: flex; align-items: center; gap: 6px; margin-top: 3px; }
+  .item-qty { font-size: 11px; color: #8898b8; }
+  .item-tag {
+    font-size: 9px;
+    font-weight: 700;
+    padding: 2px 7px;
+    border-radius: 8px;
+    letter-spacing: 0.04em;
+  }
+  .tag-desc { background: #e6f4e6; color: #1a7a1a; }
+  .tag-margen { background: #e8eef8; color: #1a3a7a; }
+  .tag-warn { background: #fff3e0; color: #b06000; }
+
+  .item-precio { text-align: right; flex-shrink: 0; }
+  .item-usd { font-size: 14px; font-weight: 600; color: #0d1b3e; }
+  .item-ars { font-size: 10px; color: #8898b8; margin-top: 1px; }
+
+  /* Divisor */
+  .divisor { height: 6px; background: #f0f2f8; }
+
+  /* Totales */
+  .totales-block { padding: 16px 24px; }
+  .total-sub-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 6px;
+  }
+  .total-sub-label { font-size: 12px; color: #8898b8; }
+  .total-sub-val { font-size: 12px; color: #5a6a8a; font-weight: 500; }
+  .total-main {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background: #0d1b3e;
+    margin: 10px 0 0;
+    padding: 14px 16px;
+    border-radius: 12px;
+  }
+  .total-main-label { font-size: 12px; color: rgba(255,255,255,0.6); text-transform: uppercase; letter-spacing: 0.08em; }
+  .total-main-right { text-align: right; }
+  .total-usd { font-size: 22px; font-weight: 700; color: #fff; }
+  .total-ars { font-size: 11px; color: rgba(255,255,255,0.5); margin-top: 2px; }
+  .tc-note { font-size: 10px; color: #8898b8; margin-top: 8px; text-align: center; }
+
+  /* Vencimiento */
+  .vencimiento-bar {
+    margin: 0 24px 16px;
+    background: #fffaf0;
+    border: 0.5px solid #f0e0b0;
+    border-radius: 10px;
+    padding: 8px 14px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .venc-icon { font-size: 14px; }
+  .venc-text { font-size: 11px; color: #8a6000; }
+  .venc-fecha { font-weight: 600; }
+
+  /* Footer */
+  .card-footer {
+    background: #0d1b3e;
+    padding: 16px 24px;
+    margin-top: auto;
+  }
+  .footer-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 16px; margin-bottom: 10px; }
+  .footer-item { display: flex; align-items: center; gap: 5px; }
+  .footer-dot { width: 3px; height: 3px; border-radius: 50%; background: rgba(255,255,255,0.3); flex-shrink: 0; }
+  .footer-val { font-size: 10px; color: rgba(255,255,255,0.55); }
+  .footer-legal { font-size: 8px; color: rgba(255,255,255,0.2); border-top: 0.5px solid rgba(255,255,255,0.08); padding-top: 8px; text-align: center; line-height: 1.5; }
+
+  /* Toast */
+  #toast {
+    position: fixed;
+    bottom: 24px;
+    left: 50%;
+    transform: translateX(-50%) translateY(80px);
+    background: #1a7a1a;
+    color: #fff;
+    padding: 12px 24px;
+    border-radius: 24px;
+    font-size: 14px;
+    font-weight: 500;
+    transition: transform 0.3s ease;
+    z-index: 999;
+    white-space: nowrap;
+  }
+  #toast.show { transform: translateX(-50%) translateY(0); }
+</style>
+</head>
+<body>
+
+<div id="top-ui">
+  <div id="top-title">Compartir presupuesto</div>
+  <button id="btn-guardar" onclick="exportarImagen()">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
+    </svg>
+    Guardar imagen
+  </button>
+</div>
+
+<div id="loading-msg">Cargando presupuesto...</div>
+<div id="error-msg"></div>
+
+<div id="presupuesto-card">
+
+  <div class="card-header">
+    <div class="header-top">
+      <div class="logo-area">
+        <svg class="logo-icon" viewBox="0 0 80 80" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <polygon points="4,4 34,4 34,34 4,34" fill="rgba(255,255,255,0.9)"/>
+          <polygon points="34,4 76,4 76,46 34,46" fill="rgba(255,255,255,0.45)"/>
+          <polygon points="4,34 34,34 34,76 4,76" fill="rgba(255,255,255,0.45)"/>
+          <polygon points="34,46 76,46 76,76 34,76" fill="rgba(255,255,255,0.2)"/>
+          <polygon points="18,18 40,18 40,40 18,40" fill="rgba(255,255,255,0.15)"/>
+        </svg>
+        <div class="logo-text">
+          <span class="logo-nova">NOVA</span>
+          <span class="logo-domus">DOMUS</span>
+        </div>
+      </div>
+      <div class="header-num">
+        <div class="num-label">Presupuesto</div>
+        <div class="num-val" id="hdr-numero">—</div>
+      </div>
+    </div>
+    <div class="header-tagline">Habitamos espacios inteligentes</div>
+  </div>
+
+  <div class="cliente-strip">
+    <div class="cliente-info">
+      <div class="cliente-label">Preparado para</div>
+      <div class="cliente-nombre" id="cli-nombre">—</div>
+      <div class="cliente-empresa" id="cli-empresa"></div>
+    </div>
+    <div class="tipo-badge" id="cli-tipo-badge">—</div>
+  </div>
+
+  <div id="items-container"></div>
+
+  <div class="divisor"></div>
+
+  <div class="totales-block">
+    <div class="total-sub-row" id="row-disp" style="display:none">
+      <span class="total-sub-label">Dispositivos</span>
+      <span class="total-sub-val" id="sub-disp">—</span>
+    </div>
+    <div class="total-sub-row" id="row-mo" style="display:none">
+      <span class="total-sub-label">Servicios</span>
+      <span class="total-sub-val" id="sub-mo">—</span>
+    </div>
+    <div class="total-main">
+      <span class="total-main-label">Total</span>
+      <div class="total-main-right">
+        <div class="total-usd" id="tot-usd">—</div>
+        <div class="total-ars" id="tot-ars">—</div>
+      </div>
+    </div>
+    <div class="tc-note" id="tc-note"></div>
+  </div>
+
+  <div class="vencimiento-bar">
+    <span class="venc-icon">⏱</span>
+    <span class="venc-text">Cotización válida hasta el <span class="venc-fecha" id="venc-fecha">—</span></span>
+  </div>
+
+  <div class="card-footer">
+    <div class="footer-grid">
+      <div class="footer-item"><div class="footer-dot"></div><span class="footer-val">3516-747513</span></div>
+      <div class="footer-item"><div class="footer-dot"></div><span class="footer-val">admin@nova-domus.com.ar</span></div>
+      <div class="footer-item"><div class="footer-dot"></div><span class="footer-val">www.nova-domus.com.ar</span></div>
+      <div class="footer-item"><div class="footer-dot"></div><span class="footer-val">@nova_domus_domotica</span></div>
+    </div>
+    <div class="footer-legal">NOVA DOMUS ES MARCA REGISTRADA POR NDWD SAS · CUIT 30-71858914-9 · LOS PRECIOS EN USD SON DE REFERENCIA. EL PRECIO EN PESOS ES REFERENCIAL SEGÚN COTIZACIÓN INDICADA.</div>
+  </div>
+
+</div>
+
+<div id="toast">✓ Imagen guardada</div>
+
+<script>
+const SUPABASE_URL = 'https://vvwnyszcfindtuvojqgs.supabase.co';
+const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZ2d255c3pjZmluZHR1dm9qcWdzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODE0NzQ0OTYsImV4cCI6MjA5NzA1MDQ5Nn0.m88xRQjifgPayIBY8Y98fP4jQ1AzyrBJidZDyTamWxE';
+
+function fmtFecha(dt) {
+  return new Date(dt).toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+}
+function fmtUSD(n) { return 'USD ' + Number(n).toLocaleString('es-AR', { minimumFractionDigits: 0, maximumFractionDigits: 0 }); }
+function fmtARS(n) { return '$ ' + Number(n).toLocaleString('es-AR', { minimumFractionDigits: 0, maximumFractionDigits: 0 }); }
+
+async function sbGet(path) {
+  const r = await fetch(SUPABASE_URL + path, {
+    headers: { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY }
+  });
+  return r.json();
+}
+
+async function cargarPresupuesto(id) {
+  document.getElementById('loading-msg').style.display = 'block';
+
+  const [pres, items] = await Promise.all([
+    sbGet(`/rest/v1/presupuestos_comerciales?id=eq.${id}&select=*`),
+    sbGet(`/rest/v1/presupuestos_items?presupuesto_id=eq.${id}&select=*&order=tipo_linea,id`)
+  ]);
+
+  document.getElementById('loading-msg').style.display = 'none';
+
+  if (!pres?.length) {
+    const err = document.getElementById('error-msg');
+    err.textContent = 'No se encontró el presupuesto. Verificá el link.';
+    err.style.display = 'block';
+    return;
+  }
+
+  const p = pres[0];
+  const tc = Number(p.tc_bna_oficial);
+  const esB2B = p.cliente_tipo === 'B2B';
+
+  // Header
+  document.getElementById('hdr-numero').textContent = p.numero;
+  document.getElementById('cli-nombre').textContent = p.cliente_nombre;
+  document.getElementById('cli-empresa').textContent = p.cliente_empresa || '';
+  const tipoBadge = document.getElementById('cli-tipo-badge');
+  tipoBadge.textContent = p.cliente_tipo;
+  tipoBadge.className = 'tipo-badge ' + (esB2B ? 'tipo-b2b' : 'tipo-b2c');
+
+  // Vencimiento
+  document.getElementById('venc-fecha').textContent = fmtFecha(p.fecha_vencimiento);
+
+  // Items
+  const container = document.getElementById('items-container');
+  const dispositivos = items.filter(i => i.tipo_linea === 'DISPOSITIVO');
+  const servicios = items.filter(i => i.tipo_linea === 'SERVICIO');
+
+  function buildItems(arr, label) {
+    if (!arr.length) return;
+    const sec = document.createElement('div');
+    sec.className = 'section-label';
+    sec.textContent = label;
+    container.appendChild(sec);
+
+    arr.forEach(it => {
+      const row = document.createElement('div');
+      row.className = 'item-row';
+
+      const descPct = Math.round(it.descuento_aplicado * 100);
+      const margenPct = it.margen_porcentaje ? Math.round(it.margen_porcentaje * 100) : null;
+      const subtotalARS = fmtARS(it.subtotal_usd * tc);
+
+      let tagHTML = '';
+      if (it.alerta_b2b_imposible) {
+        tagHTML = `<span class="item-tag tag-warn">precio mínimo</span>`;
+      } else if (esB2B && margenPct !== null && it.tipo_linea === 'DISPOSITIVO') {
+        tagHTML = `<span class="item-tag tag-margen">${margenPct}% margen</span>`;
+      } else if (it.tipo_linea === 'DISPOSITIVO') {
+        tagHTML = `<span class="item-tag tag-desc">${descPct}% OFF</span>`;
+      }
+
+      const facturaNote = it.tipo_linea === 'SERVICIO' && p.cliente_requiere_factura_a ? ' · c/IVA' : '';
+
+      row.innerHTML = `
+        <div class="item-desc">
+          <div class="item-marca">${it.marca || 'Nova Domus'}</div>
+          <div class="item-nombre">${it.nombre}</div>
+          <div class="item-qty-row">
+            <span class="item-qty">x${it.cantidad}${facturaNote}</span>
+            ${tagHTML}
+          </div>
+        </div>
+        <div class="item-precio">
+          <div class="item-usd">${fmtUSD(it.subtotal_usd)}</div>
+          <div class="item-ars">${subtotalARS}</div>
+        </div>`;
+      container.appendChild(row);
+    });
+  }
+
+  buildItems(dispositivos, '▸  Dispositivos');
+  buildItems(servicios, '▸  Servicios');
+
+  // Totales
+  if (Number(p.subtotal_dispositivos_usd) > 0) {
+    document.getElementById('row-disp').style.display = 'flex';
+    document.getElementById('sub-disp').textContent = fmtUSD(p.subtotal_dispositivos_usd) + ' · ' + fmtARS(p.subtotal_dispositivos_usd * tc);
+  }
+  if (Number(p.subtotal_mo_usd) > 0) {
+    document.getElementById('row-mo').style.display = 'flex';
+    document.getElementById('sub-mo').textContent = fmtUSD(p.subtotal_mo_usd) + ' · ' + fmtARS(p.subtotal_mo_usd * tc);
+  }
+
+  document.getElementById('tot-usd').textContent = fmtUSD(p.total_usd);
+  document.getElementById('tot-ars').textContent = fmtARS(p.total_usd * tc);
+  document.getElementById('tc-note').textContent = 'Cotización USD · TC BNA $ ' + Number(tc).toLocaleString('es-AR') + ' al ' + fmtFecha(p.fecha_emision);
+
+  document.getElementById('presupuesto-card').style.display = 'flex';
+}
+
+async function exportarImagen() {
+  const btn = document.getElementById('btn-guardar');
+  btn.textContent = 'Generando...';
+  btn.disabled = true;
+
+  try {
+    const card = document.getElementById('presupuesto-card');
+    const canvas = await html2canvas(card, {
+      scale: 2,
+      useCORS: true,
+      backgroundColor: '#ffffff',
+      logging: false
+    });
+
+    const link = document.createElement('a');
+    const num = document.getElementById('hdr-numero').textContent.replace(/[^a-zA-Z0-9-]/g, '');
+    link.download = `Presupuesto_NovaDomus_${num}.png`;
+    link.href = canvas.toDataURL('image/png');
+    link.click();
+
+    const toast = document.getElementById('toast');
+    toast.classList.add('show');
+    setTimeout(() => toast.classList.remove('show'), 2800);
+  } catch(e) {
+    alert('Error al generar imagen. Intentá de nuevo.');
+  }
+
+  btn.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="width:15px;height:15px"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg> Guardar imagen`;
+  btn.disabled = false;
+}
+
+// Leer ID de la URL: ?id=123
+const params = new URLSearchParams(window.location.search);
+const presId = params.get('id');
+
+if (presId) {
+  cargarPresupuesto(presId);
+} else {
+  // Demo con datos de ejemplo para preview
+  document.getElementById('loading-msg').style.display = 'none';
+  document.getElementById('hdr-numero').textContent = 'PC-2026-001';
+  document.getElementById('cli-nombre').textContent = 'Juan Pérez';
+  document.getElementById('cli-empresa').textContent = '';
+  const tb = document.getElementById('cli-tipo-badge');
+  tb.textContent = 'B2C'; tb.className = 'tipo-badge tipo-b2c';
+  document.getElementById('venc-fecha').textContent = '23/07/2026';
+
+  const container = document.getElementById('items-container');
+  container.innerHTML = `
+    <div class="section-label">▸  Dispositivos</div>
+    <div class="item-row">
+      <div class="item-desc">
+        <div class="item-marca">Shelly</div>
+        <div class="item-nombre">Shelly Dimmer Gen4</div>
+        <div class="item-qty-row"><span class="item-qty">x1</span><span class="item-tag tag-desc">5% OFF</span></div>
+      </div>
+      <div class="item-precio"><div class="item-usd">USD 85</div><div class="item-ars">$ 123.555</div></div>
+    </div>
+    <div class="item-row">
+      <div class="item-desc">
+        <div class="item-marca">Shelly</div>
+        <div class="item-nombre">Shelly BLU Door/Window</div>
+        <div class="item-qty-row"><span class="item-qty">x3</span><span class="item-tag tag-desc">5% OFF</span></div>
+      </div>
+      <div class="item-precio"><div class="item-usd">USD 96</div><div class="item-ars">$ 139.488</div></div>
+    </div>`;
+
+  document.getElementById('row-disp').style.display = 'flex';
+  document.getElementById('sub-disp').textContent = 'USD 181 · $ 263.043';
+  document.getElementById('tot-usd').textContent = 'USD 181';
+  document.getElementById('tot-ars').textContent = '$ 263.043';
+  document.getElementById('tc-note').textContent = 'Cotización USD · TC BNA $ 1.453 al 23/06/2026';
+  document.getElementById('presupuesto-card').style.display = 'flex';
+}
+</script>
+</body>
+</html>
