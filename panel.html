@@ -106,6 +106,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
 .p-item-right { text-align: right; flex-shrink: 0; }
 .p-usd { font-size: 14px; font-weight: 600; color: var(--text); }
 .p-ars { font-size: 10px; color: var(--text2); margin-top: 1px; }
+.p-iva { font-size: 9px; color: var(--text2); margin-top: 2px; }
 .p-totales { padding: 12px 14px; background: var(--bg2); border-top: 0.5px solid var(--border); }
 .p-total-row { display: flex; justify-content: space-between; font-size: 12px; color: var(--text2); margin-bottom: 4px; }
 .p-total-main { display: flex; justify-content: space-between; align-items: center; background: var(--navy); padding: 12px 14px; border-radius: var(--radius-sm); margin-top: 8px; }
@@ -216,7 +217,7 @@ BUSCAR PRODUCTO → respondé SOLO:
 {"action":"search","q":"término"}
 
 PRESUPUESTO CONFIRMADO → respondé SOLO:
-{"action":"listo","data":{"cliente_nombre":"","cliente_empresa":null,"cliente_email":null,"cliente_telefono":null,"cliente_tipo":"B2C","cliente_requiere_factura_a":false,"tc_bna_oficial":1453,"items":[{"tipo_linea":"DISPOSITIVO","inventario_id":null,"marca":"","nombre":"","sku":null,"cantidad":1,"precio_costo_sin_iva_usd":0,"iva_rate":0.21,"precio_costo_con_iva_usd":0,"precio_sugerido_usd":0,"descuento_aplicado":0.05,"precio_final_unitario_usd":0,"subtotal_usd":0,"margen_porcentaje":0,"alerta_b2b_imposible":false,"tipo_dolar":"USD OFICIAL"}],"subtotal_dispositivos_usd":0,"subtotal_mo_usd":0,"total_usd":0,"total_ars":0,"margen_dispositivos_usd":0,"comision_comercial_usd":0,"notas":""}}`;
+{"action":"listo","data":{"cliente_nombre":"","cliente_empresa":null,"cliente_email":null,"cliente_telefono":null,"cliente_tipo":"B2C","cliente_requiere_factura_a":false,"tc_bna_oficial":1453,"items":[{"tipo_linea":"DISPOSITIVO","inventario_id":null,"marca":"","nombre":"","sku":null,"cantidad":1,"precio_costo_sin_iva_usd":0,"iva_rate":0.21,"precio_costo_con_iva_usd":0,"precio_sugerido_usd":0,"descuento_aplicado":0.05,"precio_final_unitario_usd":0,"subtotal_usd":0,"margen_porcentaje":0,"alerta_b2b_imposible":false,"tipo_dolar":"USD OFICIAL"}],"subtotal_dispositivos_usd":0,"subtotal_mo_usd":0,"total_usd":0,"margen_dispositivos_usd":0,"comision_comercial_usd":0,"notas":""}}`;
 
 async function sb(path, opts={}) {
   const r = await fetch(SB_URL+path, { ...opts, headers: { 'apikey':SB_KEY, 'Authorization':'Bearer '+SB_KEY, 'Content-Type':'application/json', ...(opts.headers||{}) }});
@@ -238,7 +239,7 @@ async function getComercialId(nombre) {
 async function guardarEnSb(d, cid) {
   const numR = await sb('/rest/v1/rpc/generar_numero_presupuesto', { method:'POST', body:'{}' });
   const numero = typeof numR==='string' ? numR.replace(/"/g,'') : 'PC-2026-001';
-  const cab = { numero, comercial_id:cid, cliente_nombre:d.cliente_nombre, cliente_empresa:d.cliente_empresa||null, cliente_email:d.cliente_email||null, cliente_telefono:d.cliente_telefono||null, cliente_tipo:d.cliente_tipo, cliente_requiere_factura_a:d.cliente_requiere_factura_a, tc_bna_oficial:d.tc_bna_oficial, subtotal_dispositivos_usd:d.subtotal_dispositivos_usd, subtotal_mo_usd:d.subtotal_mo_usd, total_usd:d.total_usd, total_ars:d.total_ars, margen_dispositivos_usd:d.margen_dispositivos_usd, comision_comercial_usd:d.comision_comercial_usd, estado:'BORRADOR', notas:d.notas||null };
+  const cab = { numero, comercial_id:cid, cliente_nombre:d.cliente_nombre, cliente_empresa:d.cliente_empresa||null, cliente_email:d.cliente_email||null, cliente_telefono:d.cliente_telefono||null, cliente_tipo:d.cliente_tipo, cliente_requiere_factura_a:d.cliente_requiere_factura_a, tc_bna_oficial:d.tc_bna_oficial, subtotal_dispositivos_usd:d.subtotal_dispositivos_usd, subtotal_mo_usd:d.subtotal_mo_usd, total_usd:d.total_usd, margen_dispositivos_usd:d.margen_dispositivos_usd, comision_comercial_usd:d.comision_comercial_usd, estado:'BORRADOR', notas:d.notas||null };
   const presR = await sb('/rest/v1/presupuestos_comerciales?select=id', { method:'POST', headers:{'Prefer':'return=representation'}, body:JSON.stringify(cab) });
   const presId = presR?.[0]?.id;
   if (!presId) throw new Error('Sin ID');
@@ -410,6 +411,15 @@ function verPreview() {
   const disp = d.items.filter(i=>i.tipo_linea==='DISPOSITIVO');
   const serv = d.items.filter(i=>i.tipo_linea==='SERVICIO');
 
+  // IVA discriminado: siempre en dispositivos; en servicios solo con Factura A.
+  // subtotal_usd es siempre neto (no se recalcula) — esto es una capa de presentación,
+  // no toca total_usd/total_ars guardados (esos siguen siendo el neto de siempre).
+  function ivaDe(it) {
+    const aplica = it.tipo_linea === 'DISPOSITIVO' || d.cliente_requiere_factura_a;
+    const iva = aplica ? it.subtotal_usd * 0.21 : 0;
+    return { neto: it.subtotal_usd, iva, total: it.subtotal_usd + iva };
+  }
+
   function buildItems(arr, label) {
     if (!arr.length) return '';
     let h = `<div class="p-section">${label}</div>`;
@@ -420,13 +430,21 @@ function verPreview() {
       if (it.alerta_b2b_imposible) badge = `<span class="p-badge bw">precio mínimo</span>`;
       else if (esB2B && marg && it.tipo_linea==='DISPOSITIVO') badge = `<span class="p-badge bm">${marg}% margen</span>`;
       else if (it.tipo_linea==='DISPOSITIVO') badge = `<span class="p-badge bd">${desc}% OFF</span>`;
+      const { iva, total } = ivaDe(it);
+      const ivaLine = iva>0 ? `<div class="p-iva">+ IVA ${fUSD(iva)} = ${fUSD(total)} c/IVA</div>` : '';
       h += `<div class="p-item">
         <div class="p-item-left"><div class="p-marca">${it.marca}</div><div class="p-nombre">${it.nombre}</div><div class="p-qty">x${it.cantidad} ${badge}</div></div>
-        <div class="p-item-right"><div class="p-usd">${fUSD(it.subtotal_usd)}</div><div class="p-ars">${fARS(it.subtotal_usd)}</div></div>
+        <div class="p-item-right"><div class="p-usd">${fUSD(it.subtotal_usd)}</div><div class="p-ars">${fARS(it.subtotal_usd)}</div>${ivaLine}</div>
       </div>`;
     });
     return h;
   }
+
+  const dispIVA = d.subtotal_dispositivos_usd * 0.21;
+  const dispTotalCIva = d.subtotal_dispositivos_usd + dispIVA;
+  const servIVA = d.cliente_requiere_factura_a ? d.subtotal_mo_usd * 0.21 : 0;
+  const servTotalCIva = d.subtotal_mo_usd + servIVA;
+  const totalCIva = dispTotalCIva + servTotalCIva;
 
   const showLink = !!presGuardado;
   document.getElementById('btn-abrir-link').style.display = showLink ? 'flex' : 'none';
@@ -445,13 +463,17 @@ function verPreview() {
       </div>
       ${buildItems(disp,'Dispositivos')}${buildItems(serv,'Servicios')}
       <div class="p-totales">
-        ${d.subtotal_dispositivos_usd>0?`<div class="p-total-row"><span>Dispositivos</span><span>${fUSD(d.subtotal_dispositivos_usd)}</span></div>`:''}
-        ${d.subtotal_mo_usd>0?`<div class="p-total-row"><span>Servicios</span><span>${fUSD(d.subtotal_mo_usd)}</span></div>`:''}
+        ${d.subtotal_dispositivos_usd>0?`<div class="p-total-row"><span>Dispositivos · neto</span><span>${fUSD(d.subtotal_dispositivos_usd)}</span></div>
+        <div class="p-total-row"><span>Dispositivos · IVA 21%</span><span>${fUSD(dispIVA)}</span></div>`:''}
+        ${d.subtotal_mo_usd>0?`<div class="p-total-row"><span>Servicios · neto</span><span>${fUSD(d.subtotal_mo_usd)}</span></div>
+        <div class="p-total-row"><span>Servicios · IVA 21%${d.cliente_requiere_factura_a?'':' (sin Factura A)'}</span><span>${fUSD(servIVA)}</span></div>`:''}
         <div class="p-total-main">
-          <span class="p-total-main-label">Total</span>
-          <div><div class="p-total-main-usd">${fUSD(d.total_usd)}</div><div class="p-total-main-ars">${fARS(d.total_usd)}</div></div>
+          <span class="p-total-main-label">Total c/IVA</span>
+          <div><div class="p-total-main-usd">${fUSD(totalCIva)}</div><div class="p-total-main-ars">${fARS(totalCIva)}</div></div>
         </div>
-        <div style="font-size:10px;color:var(--text3);text-align:center;margin-top:6px">TC BNA $ ${Number(tc).toLocaleString('es-AR')} · ${fmt(hoy)}</div>
+        <div style="font-size:10px;color:var(--text3);text-align:center;margin-top:6px">
+          Neto (base de margen y comisión): ${fUSD(d.total_usd)} · TC BNA $ ${Number(tc).toLocaleString('es-AR')} · ${fmt(hoy)}
+        </div>
       </div>
       <div class="p-venc">⏱ Válido hasta el ${fmt(vence)}</div>
     </div>
