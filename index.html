@@ -435,38 +435,6 @@ function renderTablaB2B(tbodyId, theadId, tfootId, items, esDispositivo, requier
   return { sumNeto, sumIva, sumTotal };
 }
 
-function renderTablaB2C(tbodyId, theadId, tfootId, items, esDispositivo, requiereFacturaA, tc, monedaARS) {
-  const thead = document.getElementById(theadId);
-  const tbody = document.getElementById(tbodyId);
-  const tfoot = document.getElementById(tfootId);
-
-  thead.innerHTML = `<th>SKU</th><th>Descripción</th><th class="num">P. Unit. (IVA incl.)</th><th class="num">Cant.</th>
-    <th class="num">Total (IVA incl.)</th>`;
-
-  const fMoney = n => monedaARS ? fmtARS(n * tc) : fmtUSD(n);
-
-  let sumTotal = 0, sumNeto = 0, sumIva = 0;
-  tbody.innerHTML = items.map(it => {
-    const { neto, iva, total } = ivaDe(it.subtotal_usd, esDispositivo, requiereFacturaA);
-    const unit = total / it.cantidad;
-    sumTotal += total; sumNeto += neto; sumIva += iva;
-    const desc = descuentoPct(it.descuento_aplicado);
-    const sub = esDispositivo && it.precio_sugerido_usd ? `<span class="item-sub">Precio lista ${fmtUSD(it.precio_sugerido_usd)} &middot; ${desc}% off lista</span>` : '';
-    return `<tr>
-      <td>${it.sku || '—'}</td>
-      <td><span class="item-name">${nombreConMarca(it, esDispositivo)}</span>${sub}</td>
-      <td class="num">${fMoney(unit)}</td>
-      <td class="num">${it.cantidad}</td>
-      <td class="num">${fMoney(total)}</td>
-    </tr>`;
-  }).join('');
-
-  tfoot.innerHTML = `<td colspan="4">Subtotal ${esDispositivo ? 'dispositivos' : 'servicios'}</td>
-    <td class="num">${fMoney(sumTotal)}</td>`;
-
-  return { sumNeto, sumIva, sumTotal };
-}
-
 async function cargarPresupuesto(id) {
   document.getElementById('loading-msg').style.display = 'block';
 
@@ -490,7 +458,6 @@ async function cargarPresupuesto(id) {
   const comercialNombre = p.comercial_nombre || '—';
 
   const tc = Number(p.tc_bna_oficial);
-  const esB2B = p.cliente_tipo === 'B2B';
   const requiereFacturaA = !!p.cliente_requiere_factura_a;
 
   document.getElementById('hdr-numero').textContent = p.numero;
@@ -506,18 +473,19 @@ async function cargarPresupuesto(id) {
 
   const dispositivos = items.filter(i => i.tipo_linea === 'DISPOSITIVO');
   const servicios = items.filter(i => i.tipo_linea === 'SERVICIO');
-  const render = esB2B ? renderTablaB2B : renderTablaB2C;
 
+  // IVA discriminado igual en B2B y B2C (RG 5614/2024, Régimen de Transparencia Fiscal
+  // al Consumidor) — la condición del cliente ya no cambia el formato de la tabla.
   let dispAgg = { sumNeto: 0, sumIva: 0, sumTotal: 0 };
   let servAgg = { sumNeto: 0, sumIva: 0, sumTotal: 0 };
 
   if (dispositivos.length) {
     document.getElementById('disp-section').style.display = 'block';
-    dispAgg = render('disp-tbody', 'disp-thead', 'disp-tfoot', dispositivos, true, requiereFacturaA, tc, false);
+    dispAgg = renderTablaB2B('disp-tbody', 'disp-thead', 'disp-tfoot', dispositivos, true, requiereFacturaA, tc, false);
   }
   if (servicios.length) {
     document.getElementById('serv-section').style.display = 'block';
-    servAgg = render('serv-tbody', 'serv-thead', 'serv-tfoot', servicios, false, requiereFacturaA, tc, true);
+    servAgg = renderTablaB2B('serv-tbody', 'serv-thead', 'serv-tfoot', servicios, false, requiereFacturaA, tc, true);
   }
 
   const netoArs = dispAgg.sumNeto * tc + servAgg.sumNeto * tc;
@@ -525,30 +493,19 @@ async function cargarPresupuesto(id) {
   const totalArs = netoArs + ivaArs;
 
   const totalesEl = document.getElementById('totales');
-  if (esB2B) {
-    totalesEl.innerHTML = `
-      ${dispositivos.length ? `<div class="row"><span class="lbl">Dispositivos · neto</span><span>${fmtUSD(dispAgg.sumNeto)}</span></div>
-      <div class="row"><span class="lbl">Dispositivos · IVA 21%</span><span>${fmtUSD(dispAgg.sumIva)}</span></div>` : ''}
-      ${servicios.length ? `<div class="row sep"><span class="lbl">Servicios · neto</span><span>${fmtARS(servAgg.sumNeto * tc)}</span></div>
-      <div class="row"><span class="lbl">Servicios · IVA 21%${requiereFacturaA ? '' : ' (sin Factura A)'}</span><span>${fmtARS(servAgg.sumIva * tc)}</span></div>` : ''}
-      ${dispositivos.length ? `<div class="row grand"><span>Total dispositivos</span><span>${fmtUSD(dispAgg.sumTotal)}</span></div>` : ''}
-      ${servicios.length ? `<div class="row grand"><span>Total servicios</span><span>${fmtARS(servAgg.sumTotal * tc)}</span></div>` : ''}
-      <div class="tc-note">TC BNA utilizado: ${fmtARS(tc)} / USD.<br>
-      Total referencial consolidado en ARS (informativo): neto ${fmtARS(netoArs)} &middot; IVA ${fmtARS(ivaArs)} &middot; <strong>${fmtARS(totalArs)}</strong>.
-      Sujeto al TC vigente al momento de facturación.</div>`;
-  } else {
-    totalesEl.innerHTML = `
-      ${dispositivos.length ? `<div class="row"><span class="lbl">Total dispositivos</span><span>${fmtUSD(dispAgg.sumTotal)}</span></div>` : ''}
-      ${servicios.length ? `<div class="row"><span class="lbl">Total servicios</span><span>${fmtARS(servAgg.sumTotal * tc)}</span></div>` : ''}
-      <div class="row grand"><span>Total referencial ARS</span><span>${fmtARS(totalArs)}</span></div>
-      <div class="tc-note">TC BNA utilizado: ${fmtARS(tc)} / USD. Precios finales, IVA incluido. El monto en ARS es referencial a la fecha de emisión.</div>`;
-  }
+  totalesEl.innerHTML = `
+    ${dispositivos.length ? `<div class="row"><span class="lbl">Dispositivos · neto</span><span>${fmtUSD(dispAgg.sumNeto)}</span></div>
+    <div class="row"><span class="lbl">Dispositivos · IVA 21%</span><span>${fmtUSD(dispAgg.sumIva)}</span></div>` : ''}
+    ${servicios.length ? `<div class="row sep"><span class="lbl">Servicios · neto</span><span>${fmtARS(servAgg.sumNeto * tc)}</span></div>
+    <div class="row"><span class="lbl">Servicios · IVA 21%${requiereFacturaA ? '' : ' (sin Factura A)'}</span><span>${fmtARS(servAgg.sumIva * tc)}</span></div>` : ''}
+    ${dispositivos.length ? `<div class="row grand"><span>Total dispositivos</span><span>${fmtUSD(dispAgg.sumTotal)}</span></div>` : ''}
+    ${servicios.length ? `<div class="row grand"><span>Total servicios</span><span>${fmtARS(servAgg.sumTotal * tc)}</span></div>` : ''}
+    <div class="tc-note">TC BNA utilizado: ${fmtARS(tc)} / USD.<br>
+    Total referencial consolidado en ARS (informativo): neto ${fmtARS(netoArs)} &middot; IVA ${fmtARS(ivaArs)} &middot; <strong>${fmtARS(totalArs)}</strong>.
+    Sujeto al TC vigente al momento de facturación.</div>`;
 
   const condEl = document.getElementById('condiciones');
-  const notaIva = esB2B
-    ? `<div class="iva-note"><strong>IVA discriminado</strong> conforme condición fiscal B2B. Los importes en dólares son los reales de venta; el total consolidado en pesos es referencial al tipo de cambio de emisión.</div>`
-    : `<div class="iva-note">Todos los precios incluyen IVA. El monto en ARS es referencial al tipo de cambio de emisión.</div>`;
-  condEl.innerHTML = `${notaIva}
+  condEl.innerHTML = `<div class="iva-note"><strong>IVA discriminado</strong> conforme normativa vigente (RG 5614/2024, Régimen de Transparencia Fiscal al Consumidor). Los importes en dólares son los reales de venta; el total consolidado en pesos es referencial al tipo de cambio de emisión.</div>
     <p><strong>Validez:</strong> este presupuesto tiene una validez de 15 días desde su emisión.</p>
     <p><strong>Materiales:</strong> sujetos a cotización del proveedor al momento de la compra.</p>
     <p><strong>Forma de pago:</strong> a coordinar con el área comercial.</p>`;
