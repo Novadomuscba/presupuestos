@@ -470,6 +470,8 @@ async function cargarPresupuesto(id) {
   const requiereFacturaA = !!p.cliente_requiere_factura_a;
 
   document.getElementById('hdr-numero').textContent = p.numero;
+
+  document.title = `Presupuesto Nova Domus - ${p.numero}`;
   document.getElementById('hdr-emision').textContent = 'Emisión ' + fmtFecha(p.fecha_emision);
   document.getElementById('hdr-vence').textContent = fmtFecha(p.fecha_vencimiento);
   const tipoChip = document.getElementById('hdr-tipo');
