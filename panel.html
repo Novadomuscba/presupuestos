@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
 <title>Nova Domus — Comercial</title>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.0.0/dist/tabler-icons.min.css">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
 * { box-sizing: border-box; margin: 0; padding: 0; }
 :root {
@@ -27,7 +28,6 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
 #logo-mark { width: 30px; height: 30px; flex-shrink: 0; }
 #header-title { font-size: 13px; font-weight: 600; color: var(--text); }
 #header-sub { font-size: 11px; color: var(--text2); margin-top: 1px; }
-#comercial-select { font-size: 12px; padding: 5px 9px; border-radius: var(--radius-sm); border: 0.5px solid var(--border2); background: var(--bg2); color: var(--text); outline: none; }
 
 /* Barra de presupuesto */
 #pres-bar { padding: 8px 14px; background: var(--bg2); border-bottom: 0.5px solid var(--border); display: none; align-items: center; justify-content: space-between; gap: 10px; flex-shrink: 0; }
@@ -139,13 +139,12 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
         <div id="header-sub">Presupuestos inteligentes</div>
       </div>
     </div>
-    <select id="comercial-select">
-      <option value="">Mi nombre...</option>
-      <option value="Agustín">Agustín</option>
-      <option value="Maxi">Maxi</option>
-      <option value="Lucas">Lucas</option>
-      <option value="Mili">Mili</option>
-    </select>
+    <div id="header-right" style="display:flex;align-items:center;gap:8px;">
+      <span id="user-name" style="font-size:12px;color:var(--text2);">Cargando...</span>
+      <button onclick="handleLogout()" title="Cerrar sesión" style="background:none;border:none;cursor:pointer;color:var(--text2);font-size:16px;padding:4px;line-height:1;">
+        <i class="ti ti-logout"></i>
+      </button>
+    </div>
   </div>
 
   <div id="pres-bar">
@@ -161,7 +160,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
 
   <div id="messages">
     <div class="msg assistant">
-      <div class="bubble">¡Hola! Soy tu asistente comercial Nova Domus 👋<br><br>Seleccioná tu nombre arriba y contame qué presupuesto querés armar — cliente, tipo (B2C o B2B) y productos.</div>
+      <div class="bubble">¡Hola! Soy tu asistente comercial Nova Domus 👋<br><br>Contame qué presupuesto querés armar — cliente, tipo (B2C o B2B) y productos.</div>
       <div class="timestamp">ahora</div>
     </div>
   </div>
@@ -189,10 +188,14 @@ const SB_URL = 'https://vvwnyszcfindtuvojqgs.supabase.co';
 const SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZ2d255c3pjZmluZHR1dm9qcWdzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODE0NzQ0OTYsImV4cCI6MjA5NzA1MDQ5Nn0.m88xRQjifgPayIBY8Y98fP4jQ1AzyrBJidZDyTamWxE';
 const PAGES_BASE = 'https://novadomuscba.github.io/presupuestos/';
 
+const { createClient } = supabase;
+const authClient = createClient(SB_URL, SB_KEY);
+
 let history = [];
 let presActual = null;
 let presGuardado = null;
-let comercial = '';
+let comercialId = null;
+let comercialNombre = '';
 
 const SYSTEM = `Sos el asistente comercial de Nova Domus, empresa de domótica e integración tecnológica en Córdoba, Argentina.
 
@@ -222,8 +225,40 @@ PRESUPUESTO CONFIRMADO → respondé SOLO:
 {"action":"listo","data":{"cliente_nombre":"","cliente_empresa":null,"cliente_email":null,"cliente_telefono":null,"cliente_tipo":"B2C","cliente_requiere_factura_a":false,"tc_bna_oficial":1453,"items":[{"tipo_linea":"DISPOSITIVO","inventario_id":null,"marca":"","nombre":"","sku":null,"cantidad":1,"precio_costo_sin_iva_usd":0,"iva_rate":0.21,"precio_costo_con_iva_usd":0,"precio_sugerido_usd":0,"descuento_aplicado":0.05,"precio_final_unitario_usd":0,"subtotal_usd":0,"margen_porcentaje":0,"alerta_b2b_imposible":false,"tipo_dolar":"USD OFICIAL"}],"subtotal_dispositivos_usd":0,"subtotal_mo_usd":0,"total_usd":0,"margen_dispositivos_usd":0,"comision_comercial_usd":0,"notas":""}}`;
 
 async function sb(path, opts={}) {
-  const r = await fetch(SB_URL+path, { ...opts, headers: { 'apikey':SB_KEY, 'Authorization':'Bearer '+SB_KEY, 'Content-Type':'application/json', ...(opts.headers||{}) }});
-  return r.json();
+  const { data: { session } } = await authClient.auth.getSession();
+  const token = session?.access_token || SB_KEY;
+  const r = await fetch(SB_URL+path, { ...opts, headers: { 'apikey':SB_KEY, 'Authorization':'Bearer '+token, 'Content-Type':'application/json', ...(opts.headers||{}) }});
+  const text = await r.text(); // regla del proyecto: nunca .json() directo
+  return text ? JSON.parse(text) : null;
+}
+
+// Verifica sesion real (Bloque 1B-2, 13/08/2026). Sin sesion -> login.html.
+// comercial_id/nombre salen de la sesion via current_comercial_id() -- ya no de un
+// <select> del formulario, para que RLS pueda validar propiedad en el INSERT.
+async function initSesion() {
+  const { data: { session } } = await authClient.auth.getSession();
+  if (!session) { window.location.href = 'login.html'; return false; }
+
+  const cid = await sb('/rest/v1/rpc/current_comercial_id', { method:'POST', body:'{}' });
+  comercialId = cid;
+
+  if (!comercialId) {
+    document.getElementById('user-name').textContent = 'Sin vincular';
+    addMsg('assistant', 'Tu usuario todavía no está vinculado a un comercial de ventas — avisale a Agustín para poder armar presupuestos.');
+    document.getElementById('msg-input').disabled = true;
+    document.getElementById('send-btn').disabled = true;
+    return false;
+  }
+
+  const rows = await sb(`/rest/v1/comerciales?id=eq.${comercialId}&select=nombre`);
+  comercialNombre = rows?.[0]?.nombre || session.user.email || '';
+  document.getElementById('user-name').textContent = comercialNombre;
+  return true;
+}
+
+async function handleLogout() {
+  await authClient.auth.signOut();
+  window.location.href = 'login.html';
 }
 
 async function buscarInventario(q) {
@@ -233,15 +268,10 @@ async function buscarInventario(q) {
   return Array.isArray(data) ? data : [];
 }
 
-async function getComercialId(nombre) {
-  const d = await sb(`/rest/v1/comerciales?nombre=eq.${encodeURIComponent(nombre)}&select=id`);
-  return d?.[0]?.id || null;
-}
-
-async function guardarEnSb(d, cid) {
+async function guardarEnSb(d) {
   const numR = await sb('/rest/v1/rpc/generar_numero_presupuesto', { method:'POST', body:'{}' });
   const numero = typeof numR==='string' ? numR.replace(/"/g,'') : 'PC-2026-001';
-  const cab = { numero, comercial_id:cid, cliente_nombre:d.cliente_nombre, cliente_empresa:d.cliente_empresa||null, cliente_email:d.cliente_email||null, cliente_telefono:d.cliente_telefono||null, cliente_tipo:d.cliente_tipo, cliente_requiere_factura_a:d.cliente_requiere_factura_a, tc_bna_oficial:d.tc_bna_oficial, subtotal_dispositivos_usd:d.subtotal_dispositivos_usd, subtotal_mo_usd:d.subtotal_mo_usd, total_usd:d.total_usd, margen_dispositivos_usd:d.margen_dispositivos_usd, comision_comercial_usd:d.comision_comercial_usd, estado:'BORRADOR', notas:d.notas||null };
+  const cab = { numero, comercial_id:comercialId, cliente_nombre:d.cliente_nombre, cliente_empresa:d.cliente_empresa||null, cliente_email:d.cliente_email||null, cliente_telefono:d.cliente_telefono||null, cliente_tipo:d.cliente_tipo, cliente_requiere_factura_a:d.cliente_requiere_factura_a, tc_bna_oficial:d.tc_bna_oficial, subtotal_dispositivos_usd:d.subtotal_dispositivos_usd, subtotal_mo_usd:d.subtotal_mo_usd, total_usd:d.total_usd, margen_dispositivos_usd:d.margen_dispositivos_usd, comision_comercial_usd:d.comision_comercial_usd, estado:'BORRADOR', notas:d.notas||null };
   const presR = await sb('/rest/v1/presupuestos_comerciales?select=id', { method:'POST', headers:{'Prefer':'return=representation'}, body:JSON.stringify(cab) });
   const presId = presR?.[0]?.id;
   if (!presId) throw new Error('Sin ID');
@@ -361,8 +391,7 @@ async function sendMessage() {
   const input = document.getElementById('msg-input');
   const text = input.value.trim();
   if (!text) return;
-  comercial = document.getElementById('comercial-select').value;
-  if (!comercial) { addMsg('assistant', 'Primero seleccioná tu nombre arriba 👆'); return; }
+  if (!comercialId) { addMsg('assistant', 'Tu usuario todavía no está vinculado a un comercial de ventas — avisale a Agustín.'); return; }
   input.value = ''; input.style.height = '';
   addMsg('user', text);
   typing(true);
@@ -382,8 +411,7 @@ async function guardarPresupuesto() {
   btn.innerHTML = '<i class="ti ti-loader"></i> Guardando...';
   btn.disabled = true;
   try {
-    const cid = await getComercialId(comercial);
-    const { id, numero } = await guardarEnSb(presActual, cid);
+    const { id, numero } = await guardarEnSb(presActual);
     presGuardado = { id, numero };
     document.getElementById('pres-num').textContent = numero;
     document.getElementById('pres-sub').textContent = 'Guardado · BORRADOR';
@@ -491,6 +519,8 @@ function verPreview() {
 
 function closePreview() { document.getElementById('preview-modal').classList.remove('open'); }
 function abrirLinkPreview() { if(presGuardado) openLink(PAGES_BASE+'?id='+presGuardado.id); closePreview(); }
+
+initSesion();
 </script>
 </body>
 </html>
