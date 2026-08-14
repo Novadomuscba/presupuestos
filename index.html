@@ -374,7 +374,11 @@ const SUPABASE_URL = 'https://vvwnyszcfindtuvojqgs.supabase.co';
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZ2d255c3pjZmluZHR1dm9qcWdzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODE0NzQ0OTYsImV4cCI6MjA5NzA1MDQ5Nn0.m88xRQjifgPayIBY8Y98fP4jQ1AzyrBJidZDyTamWxE';
 
 function fmtFecha(dt) {
-  return new Date(dt).toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+  // new Date('YYYY-MM-DD') parsea como medianoche UTC; en UTC-3 eso renderiza
+  // un día antes. Se construye con componentes locales para evitar el corrimiento.
+  if (!dt) return '';
+  const [y, m, d] = dt.split('-').map(Number);
+  return new Date(y, m - 1, d).toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric' });
 }
 function fmtUSD(n) { return 'U$S ' + Number(n).toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
 function fmtARS(n) { return '$ ' + Number(n).toLocaleString('es-AR', { minimumFractionDigits: 0, maximumFractionDigits: 0 }); }
