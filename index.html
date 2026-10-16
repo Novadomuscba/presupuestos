@@ -108,6 +108,14 @@ tbody td{ padding:9px 8px; border-bottom:1px solid #ECE7D4; vertical-align:top; 
 tbody td.num{ text-align:right; font-variant-numeric:tabular-nums; white-space:nowrap; }
 tbody tr:nth-child(even){ background:#F7F4E6; }
 .item-name{ font-weight:600; }
+/* Foto de producto: solo dispositivos, y solo si al menos uno del presupuesto tiene foto. */
+.desc-flex{ display:flex; gap:10px; align-items:flex-start; }
+.thumb{
+  flex-shrink:0; width:46px; height:46px; background:#fff; border:0.5px solid #D3D1C7; border-radius:4px;
+  padding:3px; display:flex; align-items:center; justify-content:center;
+}
+.thumb img{ width:100%; height:100%; object-fit:contain; display:block; }
+.thumb svg{ width:22px; height:22px; display:block; }
 .item-sub{ display:block; font-size:10px; color:var(--azul-nova); opacity:.68; margin-top:2px; font-weight:400; }
 tfoot td{ padding:9px 8px; font-weight:700; border-top:2px solid var(--azul-nova); background:#EFEAD7; }
 tfoot td.num{ text-align:right; white-space:nowrap; }
@@ -179,7 +187,7 @@ tfoot td.num{ text-align:right; white-space:nowrap; }
 <div id="top-ui">
   <div id="top-title">Compartir presupuesto</div>
   <div id="top-actions">
-    <button class="top-btn secondary" onclick="window.print()">
+    <button class="top-btn secondary" onclick="imprimir()">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9V2h12v7"/><path d="M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
       Descargar PDF
     </button>
@@ -440,6 +448,73 @@ function nombreConMarca(it, esDispositivo) {
   return it.nombre + (esDispositivo && it.marca ? ' — ' + it.marca : '');
 }
 
+function escAttr(s) {
+  return String(s ?? '').replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+// Foto de producto: solo URLs con imagen_estado = 'cargada'. La vista ya filtra; si
+// algún día llega imagen_estado, se vuelve a filtrar acá (hay URLs 'pendiente' cargadas).
+function fotoDe(it) {
+  if (!it.imagen_url) return null;
+  if ('imagen_estado' in it && it.imagen_estado !== 'cargada') return null;
+  return it.imagen_url;
+}
+
+// Placeholder por familia (inventario.grupo). SVG inline de trazo 1.5: un documento
+// imprimible no puede depender de webfonts de íconos externos.
+const ICONOS_FAMILIA = {
+  camara:  '<path d="M3 7h11l3 3v4l-3 3H3z"/><circle cx="9" cy="12" r="2.5"/><path d="M17 10l4-2v8l-4-2"/>',
+  alarma:  '<path d="M12 3l7 3v5c0 4.5-3 8-7 10-4-2-7-5.5-7-10V6z"/><path d="M9 12l2 2 4-4"/>',
+  acceso:  '<rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 018 0v3"/><circle cx="12" cy="16" r="1.2"/>',
+  portero: '<rect x="6" y="3" width="12" height="18" rx="2"/><circle cx="12" cy="8" r="2"/><path d="M9 14h6M9 17h6"/>',
+  red:     '<path d="M2.5 9a14 14 0 0119 0"/><path d="M5.5 12.5a9.5 9.5 0 0113 0"/><path d="M8.5 16a5 5 0 017 0"/><circle cx="12" cy="19.5" r="1"/>',
+  rack:    '<rect x="4" y="3" width="16" height="18" rx="1.5"/><path d="M4 9h16M4 15h16"/><circle cx="7.5" cy="6" r=".6"/><circle cx="7.5" cy="12" r=".6"/><circle cx="7.5" cy="18" r=".6"/>',
+  pantalla:'<rect x="3" y="4" width="18" height="12" rx="1.5"/><path d="M9 20h6M12 16v4"/>',
+  audio:   '<path d="M4 9h4l5-4v14l-5-4H4z"/><path d="M16.5 9a4 4 0 010 6M19 6.5a8 8 0 010 11"/>',
+  luz:     '<path d="M9 18h6M10 21h4"/><path d="M12 3a6 6 0 00-3.5 10.9c.6.5 1 1.2 1 2.1h5c0-.9.4-1.6 1-2.1A6 6 0 0012 3z"/>',
+  control: '<rect x="6" y="6" width="12" height="12" rx="1.5"/><rect x="9.5" y="9.5" width="5" height="5"/><path d="M9 3v3M15 3v3M9 18v3M15 18v3M3 9h3M3 15h3M18 9h3M18 15h3"/>',
+  cable:   '<path d="M8 3v5M16 3v5"/><path d="M6 8h12v3a6 6 0 01-12 0z"/><path d="M12 17v4"/>',
+  generico:'<path d="M3 7.5l9-4.5 9 4.5v9L12 21l-9-4.5z"/><path d="M3 7.5l9 4.5 9-4.5M12 12v9"/>'
+};
+function familiaDe(grupo) {
+  const g = String(grupo || '').toLowerCase();
+  if (/seguridad|nvr|dvr|c[aá]mara/.test(g)) return 'camara';
+  if (/alarma|sensor|barrera/.test(g)) return 'alarma';
+  if (/acceso|cerradura|caja fuerte/.test(g)) return 'acceso';
+  if (/portero/.test(g)) return 'portero';
+  if (/router|access point|antena|cpe|switch|gpon|fibra/.test(g)) return 'red';
+  if (/rack|gabinete|disco|ups|estabilizador|tablero/.test(g)) return 'rack';
+  if (/televisor|proyector|pantalla|monitor/.test(g)) return 'pantalla';
+  if (/audio|speaker/.test(g)) return 'audio';
+  if (/lampara|l[aá]mpara|luminaria|plafon|artefacto|outdoor$/.test(g)) return 'luz';
+  if (/control|dom[oó]tica|modulo|m[oó]dulo|serie|gen \d|medidor/.test(g)) return 'control';
+  if (/cable|electricidad|accesorio|bajo voltaje/.test(g)) return 'cable';
+  return 'generico';
+}
+function iconoFamilia(grupo) {
+  return `<svg viewBox="0 0 24 24" fill="none" stroke="#787A91" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICONOS_FAMILIA[familiaDe(grupo)]}</svg>`;
+}
+// onerror de la foto: se reemplaza por el placeholder de familia, nunca un ícono roto.
+function fotoFallback(img) {
+  img.onerror = null;
+  img.parentNode.innerHTML = iconoFamilia(img.dataset.grupo);
+}
+function thumbHtml(it) {
+  const url = fotoDe(it);
+  return `<span class="thumb">${url
+    ? `<img src="${escAttr(url)}" alt="${escAttr(it.nombre)}" loading="eager" data-grupo="${escAttr(it.grupo)}" onerror="fotoFallback(this)">`
+    : iconoFamilia(it.grupo)}</span>`;
+}
+
+// Las imágenes tienen que estar decodificadas antes de imprimir o capturar.
+async function esperarImagenes() {
+  await Promise.all([...document.images].map(i => i.decode().catch(() => {})));
+}
+async function imprimir() {
+  await esperarImagenes();
+  window.print();
+}
+
 function renderTablaB2B(tbodyId, theadId, tfootId, items, esDispositivo, requiereFacturaA, tc, monedaARS) {
   const thead = document.getElementById(theadId);
   const tbody = document.getElementById(tbodyId);
@@ -450,6 +525,10 @@ function renderTablaB2B(tbodyId, theadId, tfootId, items, esDispositivo, requier
 
   const fMoney = n => monedaARS ? fmtARS(n * tc) : fmtUSD(n);
 
+  // Ningún dispositivo con foto → la tabla queda exactamente como antes (sin slot).
+  // Al menos uno → todos llevan slot, con foto o con el ícono de su familia.
+  const conSlot = esDispositivo && items.some(fotoDe);
+
   let sumNeto = 0, sumIva = 0, sumTotal = 0;
   tbody.innerHTML = items.map(it => {
     const { neto, iva, total } = ivaDe(it.subtotal_usd, esDispositivo, requiereFacturaA);
@@ -457,9 +536,10 @@ function renderTablaB2B(tbodyId, theadId, tfootId, items, esDispositivo, requier
     sumNeto += neto; sumIva += iva; sumTotal += total;
     const desc = descuentoPct(it.descuento_aplicado);
     const sub = esDispositivo && it.precio_sugerido_usd ? `<span class="item-sub">Precio lista ${fmtUSD(it.precio_sugerido_usd)} &middot; ${desc}% off lista</span>` : '';
+    const descripcion = `<span class="item-name">${nombreConMarca(it, esDispositivo)}</span>${sub}`;
     return `<tr>
       <td>${it.sku || '—'}</td>
-      <td><span class="item-name">${nombreConMarca(it, esDispositivo)}</span>${sub}</td>
+      <td>${conSlot ? `<div class="desc-flex">${thumbHtml(it)}<div>${descripcion}</div></div>` : descripcion}</td>
       <td class="num">${fMoney(unit)}</td>
       <td class="num">${it.cantidad}</td>
       <td class="num">${fMoney(neto)}</td>
@@ -575,6 +655,7 @@ async function exportarImagen() {
   btn.disabled = true;
 
   try {
+    await esperarImagenes();
     const card = document.getElementById('page-wrap');
     const canvas = await html2canvas(card, {
       scale: 2,
