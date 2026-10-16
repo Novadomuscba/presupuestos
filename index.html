@@ -135,6 +135,14 @@ tfoot td.num{ text-align:right; white-space:nowrap; }
 .condiciones strong{ color:var(--azul-profundo); }
 .condiciones .iva-note{ background:#EFEAD7; border-left:3px solid var(--dorado); padding:8px 12px; margin-bottom:10px; }
 
+/* Marco del documento: en pantalla son bloques comunes; al imprimir pasa a ser una
+   tabla real para que thead/tfoot (reservas de las bandas fijas) se repitan en cada
+   página. Chrome no repite grupos header/footer de tablas CSS hechas con div. */
+.sheet-frame, .sheet-frame > tbody, .sheet-frame > tbody > tr, .sheet-frame > tbody > tr > td{
+  display:block; width:auto; margin:0; padding:0; border:0; background:none; font-size:inherit; font-weight:inherit;
+}
+.sheet-frame > thead, .sheet-frame > tfoot{ display:none; }
+
 /* ── Impresión / PDF ── */
 @media print{
   #top-ui, #toast, #loading-msg, #error-msg{ display:none !important; }
@@ -144,7 +152,17 @@ tfoot td.num{ text-align:right; white-space:nowrap; }
   .band{ position:fixed; left:0; right:0; z-index:10; }
   .band--header{ top:0; }
   .band--footer{ bottom:0; }
-  .sheet{ padding-top:34mm; padding-bottom:24mm; }
+  /* Las bandas fijas se pintan en cada página: el contenido necesita su reserva
+     arriba y abajo en TODAS las páginas, no solo en la primera. */
+  .sheet{ padding:0 24px; }
+  .sheet-frame{ display:table; width:100%; border-collapse:collapse; }
+  .sheet-frame > thead{ display:table-header-group; }
+  .sheet-frame > tfoot{ display:table-footer-group; }
+  .sheet-frame > tbody{ display:table-row-group; }
+  .sheet-frame > tbody > tr{ display:table-row; }
+  .sheet-frame > * > tr > td{ display:table-cell; padding:0; border:0; background:none; }
+  .sheet-frame .print-spacer--top{ height:34mm; }
+  .sheet-frame .print-spacer--bottom{ height:24mm; }
 }
 
 /* Toast */
@@ -259,6 +277,10 @@ tfoot td.num{ text-align:right; white-space:nowrap; }
   </header>
 
   <main class="sheet">
+    <table class="sheet-frame" role="presentation">
+    <thead aria-hidden="true"><tr><td><div class="print-spacer--top"></div></td></tr></thead>
+    <tfoot aria-hidden="true"><tr><td><div class="print-spacer--bottom"></div></td></tr></tfoot>
+    <tbody><tr><td>
 
     <section class="meta">
       <div class="item"><div class="label">Cliente</div><div class="value" id="cli-nombre">—</div></div>
@@ -289,6 +311,8 @@ tfoot td.num{ text-align:right; white-space:nowrap; }
 
     <section class="condiciones" id="condiciones"></section>
 
+    </td></tr></tbody>
+    </table>
   </main>
 
   <footer class="band band--footer">
