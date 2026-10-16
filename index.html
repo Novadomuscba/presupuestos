@@ -113,20 +113,22 @@ tfoot td{ padding:9px 8px; font-weight:700; border-top:2px solid var(--azul-nova
 tfoot td.num{ text-align:right; white-space:nowrap; }
 
 .totales{ width:100%; margin-bottom:18px; }
+/* Recuadro resumen + total presupuesto + nota TC: una sola columna a la derecha
+   que no se parte entre páginas al imprimir. */
+.totales-col{ margin-left:auto; width:100%; max-width:300px; break-inside:avoid; page-break-inside:avoid; }
 
-.total-grand{ background:var(--azul-profundo); color:var(--crema); border-radius:6px; padding:16px 20px; margin-bottom:14px; text-align:center; }
-.total-grand .lbl{ font-family:'Michroma'; font-size:10px; letter-spacing:2px; color:var(--dorado); text-transform:uppercase; margin-bottom:8px; }
-.total-grand .vals{ display:flex; align-items:baseline; justify-content:center; gap:12px; flex-wrap:wrap; }
-.total-grand .usd{ font-family:'Michroma'; font-size:24px; color:var(--crema); }
-.total-grand .sep{ color:var(--dorado); font-size:18px; }
-.total-grand .ars{ font-size:17px; font-weight:600; color:var(--crema); opacity:.9; }
-
-.totales-detalle{ margin-left:auto; width:100%; max-width:280px; background:#EFEAD7; border:1px solid #DDD5B4; border-radius:4px; padding:14px 18px; }
+.totales-detalle{ background:#EFEAD7; border:1px solid #DDD5B4; border-radius:4px; padding:14px 18px; }
+.totales-detalle .grupo + .grupo{ margin-top:14px; }
 .totales-detalle .row{ display:flex; justify-content:space-between; font-size:12px; padding:3px 0; gap:12px; }
 .totales-detalle .row .lbl{ color:var(--azul-nova); }
-.totales-detalle .row.sep{ border-top:1px solid #DDD5B4; margin-top:4px; padding-top:8px; }
-.totales-detalle .row.grand{ border-top:2px solid var(--azul-nova); margin-top:6px; padding-top:8px; font-weight:700; font-size:14px; color:var(--azul-profundo); }
-.totales-detalle .tc-note{ font-size:10px; color:var(--azul-nova); opacity:.75; margin-top:8px; line-height:1.4; }
+.totales-detalle .row.subtotal{ border-top:1.5px solid var(--azul-nova); margin-top:4px; padding-top:6px; font-weight:600; color:var(--azul-profundo); }
+
+.total-grand{ margin-top:10px; background:var(--azul-profundo); color:var(--crema); border-radius:4px; padding:14px 18px; text-align:right; }
+.total-grand .lbl{ font-family:'Michroma'; font-size:10px; letter-spacing:2.5px; color:var(--dorado); text-transform:uppercase; margin-bottom:8px; }
+.total-grand .usd{ font-family:'Michroma'; font-size:22px; color:var(--crema); }
+.total-grand .ars{ font-family:'Inter'; font-size:12px; color:rgba(253,251,240,.68); margin-top:6px; }
+
+.tc-note{ font-size:10px; color:var(--azul-nova); opacity:.75; margin-top:8px; line-height:1.4; }
 
 .condiciones{ font-size:11px; color:var(--azul-nova); line-height:1.6; }
 .condiciones p{ margin-bottom:4px; }
@@ -509,18 +511,26 @@ async function cargarPresupuesto(id) {
   const totalArs = netoArs + ivaArs;
 
   const totalesEl = document.getElementById('totales');
+  // Cada concepto cierra con su propio total; el total presupuesto va debajo del recuadro.
   totalesEl.innerHTML = `
-    <div class="total-grand">
-      <div class="lbl">Total presupuesto</div>
-      <div class="vals"><span class="usd">${fmtUSD(totalUsd)}</span><span class="sep">&middot;</span><span class="ars">${fmtARS(totalArs)}</span></div>
-    </div>
-    <div class="totales-detalle">
-      ${dispositivos.length ? `<div class="row"><span class="lbl">Dispositivos · neto</span><span>${fmtUSD(dispAgg.sumNeto)}</span></div>
-      <div class="row"><span class="lbl">Dispositivos · IVA 21%</span><span>${fmtUSD(dispAgg.sumIva)}</span></div>` : ''}
-      ${servicios.length ? `<div class="row sep"><span class="lbl">Servicios · neto</span><span>${fmtUSD(servAgg.sumNeto)}</span></div>
-      <div class="row"><span class="lbl">Servicios · IVA 21%${requiereFacturaA ? '' : ' (sin Factura A)'}</span><span>${fmtUSD(servAgg.sumIva)}</span></div>` : ''}
-      ${dispositivos.length ? `<div class="row grand"><span>Total dispositivos</span><span>${fmtUSD(dispAgg.sumTotal)}</span></div>` : ''}
-      ${servicios.length ? `<div class="row grand"><span>Total servicios</span><span>${fmtUSD(servAgg.sumTotal)}</span></div>` : ''}
+    <div class="totales-col">
+      <div class="totales-detalle">
+        ${dispositivos.length ? `<div class="grupo">
+          <div class="row"><span class="lbl">Dispositivos · neto</span><span>${fmtUSD(dispAgg.sumNeto)}</span></div>
+          <div class="row"><span class="lbl">Dispositivos · IVA 21%</span><span>${fmtUSD(dispAgg.sumIva)}</span></div>
+          <div class="row subtotal"><span>Total dispositivos</span><span>${fmtUSD(dispAgg.sumTotal)}</span></div>
+        </div>` : ''}
+        ${servicios.length ? `<div class="grupo">
+          <div class="row"><span class="lbl">Servicios · neto</span><span>${fmtUSD(servAgg.sumNeto)}</span></div>
+          <div class="row"><span class="lbl">Servicios · IVA 21%${requiereFacturaA ? '' : ' (sin Factura A)'}</span><span>${fmtUSD(servAgg.sumIva)}</span></div>
+          <div class="row subtotal"><span>Total servicios</span><span>${fmtUSD(servAgg.sumTotal)}</span></div>
+        </div>` : ''}
+      </div>
+      <div class="total-grand">
+        <div class="lbl">Total presupuesto</div>
+        <div class="usd">${fmtUSD(totalUsd)}</div>
+        <div class="ars">${fmtARS(totalArs)} &middot; ARS referencial</div>
+      </div>
       <div class="tc-note">TC BNA utilizado: ${fmtARS(tc)} / USD.
       Total referencial en ARS (informativo): <strong>${fmtARS(totalArs)}</strong>. Sujeto al TC vigente al momento de facturación.</div>
     </div>`;
