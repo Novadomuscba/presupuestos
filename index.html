@@ -535,7 +535,15 @@ function renderTablaB2B(tbodyId, theadId, tfootId, items, esDispositivo, requier
     const unit = neto / it.cantidad;
     sumNeto += neto; sumIva += iva; sumTotal += total;
     const desc = descuentoPct(it.descuento_aplicado);
-    const sub = esDispositivo && it.precio_sugerido_usd ? `<span class="item-sub">Precio lista ${fmtUSD(it.precio_sugerido_usd)} &middot; ${desc}% off lista</span>` : '';
+    // Ítem en promo de proveedor: lista NETA y descuento combinado con el nombre de la promo
+    // (la vista solo expone el nombre; nunca costo ni el % de la promo).
+    // precio_sugerido_usd viene con IVA; los dispositivos van siempre al 21%.
+    let sub = '';
+    if (esDispositivo && it.precio_sugerido_usd) {
+      sub = it.promo_nombre
+        ? `<span class="item-sub">Precio lista neto ${fmtUSD(Number(it.precio_sugerido_usd) / 1.21)} &middot; Descuento ${escAttr(it.promo_nombre)}: ${desc}%</span>`
+        : `<span class="item-sub">Precio lista ${fmtUSD(it.precio_sugerido_usd)} &middot; ${desc}% off lista</span>`;
+    }
     const descripcion = `<span class="item-name">${nombreConMarca(it, esDispositivo)}</span>${sub}`;
     return `<tr>
       <td>${it.sku || '—'}</td>
@@ -641,7 +649,9 @@ async function cargarPresupuesto(id) {
 
   const condEl = document.getElementById('condiciones');
   condEl.innerHTML = `<div class="iva-note"><strong>IVA discriminado</strong> conforme normativa vigente (RG 5614/2024, Régimen de Transparencia Fiscal al Consumidor). Los importes en dólares son los reales de venta; el total consolidado en pesos es referencial al tipo de cambio de emisión.</div>
-    <p><strong>Validez:</strong> este presupuesto tiene una validez de 15 días desde su emisión.</p>
+    ${dispositivos.some(i => i.promo_nombre)
+      ? `<p><strong>Validez:</strong> los precios promocionales son válidos para pagos hasta el ${fmtFecha(p.fecha_vencimiento)}.</p>`
+      : `<p><strong>Validez:</strong> este presupuesto tiene una validez de 15 días desde su emisión.</p>`}
     <p><strong>Materiales:</strong> sujetos a cotización del proveedor al momento de la compra.</p>
     <p><strong>Forma de pago:</strong> a coordinar con el área comercial.</p>`;
 
