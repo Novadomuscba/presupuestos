@@ -535,14 +535,15 @@ function renderTablaB2B(tbodyId, theadId, tfootId, items, esDispositivo, requier
     const unit = neto / it.cantidad;
     sumNeto += neto; sumIva += iva; sumTotal += total;
     const desc = descuentoPct(it.descuento_aplicado);
-    // Ítem en promo de proveedor: lista NETA y descuento combinado con el nombre de la promo
-    // (la vista solo expone el nombre; nunca costo ni el % de la promo).
-    // precio_sugerido_usd viene con IVA; los dispositivos van siempre al 21%.
+    // Lista siempre NETA, como el resto de la tabla (IVA discriminado). Con promo de proveedor,
+    // el descuento combinado lleva el nombre de la promo (la vista solo expone el nombre; nunca
+    // costo ni el % de la promo). precio_sugerido_usd viene con IVA; dispositivos siempre al 21%.
     let sub = '';
     if (esDispositivo && it.precio_sugerido_usd) {
+      const listaNeto = fmtUSD(Number(it.precio_sugerido_usd) / 1.21);
       sub = it.promo_nombre
-        ? `<span class="item-sub">Precio lista neto ${fmtUSD(Number(it.precio_sugerido_usd) / 1.21)} &middot; Descuento ${escAttr(it.promo_nombre)}: ${desc}%</span>`
-        : `<span class="item-sub">Precio lista ${fmtUSD(it.precio_sugerido_usd)} &middot; ${desc}% off lista</span>`;
+        ? `<span class="item-sub">Precio lista neto ${listaNeto} &middot; Descuento ${escAttr(it.promo_nombre)}: ${desc}%</span>`
+        : `<span class="item-sub">Precio lista neto ${listaNeto} &middot; ${desc}% off lista</span>`;
     }
     const descripcion = `<span class="item-name">${nombreConMarca(it, esDispositivo)}</span>${sub}`;
     return `<tr>
